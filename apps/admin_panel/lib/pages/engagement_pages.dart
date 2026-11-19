@@ -68,7 +68,7 @@ class _ReservationsPageState extends ConsumerState<ReservationsPage> {
                     rows: [
                       for (final r in items)
                         DataRow(cells: [
-                          DataCell(Row(children: [Thumb(r.bookCover, width: 32, height: 46), const SizedBox(width: 10), Text(r.bookTitle)])),
+                          DataCell(Row(children: [CoverThumb(r.bookCover, width: 32, height: 46), const SizedBox(width: 10), Text(r.bookTitle)])),
                           DataCell(Text('${r.userName}\n${r.membershipId}'), onTap: () => context.go('/members/${r.userId}')),
                           DataCell(Text(formatDateTime(r.createdAt))),
                           DataCell(Pill(r.status == ReservationStatus.pending && r.queuePosition != null ? 'queue #${r.queuePosition}' : r.status.name,

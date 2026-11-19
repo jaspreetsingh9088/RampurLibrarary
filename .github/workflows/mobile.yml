@@ -87,7 +87,7 @@ jobs:
           python3 ../../scripts/prepare_mobile.py .
           python3 ../../scripts/write_dart_defines.py dart_defines.json
           flutter pub get
-          dart run flutter_launcher_icons
+          dart run flutter_launcher_icons -f icons_android.yaml
 
       - name: Build APK & App Bundle
         run: |
@@ -139,7 +139,7 @@ jobs:
           python3 ../../scripts/prepare_mobile.py .
           python3 ../../scripts/write_dart_defines.py dart_defines.json
           flutter pub get
-          dart run flutter_launcher_icons
+          dart run flutter_launcher_icons -f icons_ios.yaml
           cd ios && pod install --repo-update
 
       - name: Install signing certificate & profile

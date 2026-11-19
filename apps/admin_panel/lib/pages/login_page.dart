@@ -49,6 +49,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final user = ref.watch(authStateProvider).value;
     final role = ref.watch(staffRoleProvider).value;
     final notStaff = user != null && role == StaffRole.none;
+    final who = user == null ? '' : (user.email ?? user.phoneNumber ?? '');
     final t = Theme.of(context);
 
     return Scaffold(
@@ -88,7 +89,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           child: Padding(
                             padding: const EdgeInsets.all(14),
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text('${user?.email ?? user?.phoneNumber} is not a staff account.', style: const TextStyle(fontWeight: FontWeight.w700)),
+                              Text('$who is not a staff account.', style: const TextStyle(fontWeight: FontWeight.w700)),
                               const SizedBox(height: 6),
                               const Text('Ask an admin to grant you access on the Staff page, then sign in again.'),
                               TextButton(onPressed: () => FirebaseAuth.instance.signOut(), child: const Text('Use another account')),

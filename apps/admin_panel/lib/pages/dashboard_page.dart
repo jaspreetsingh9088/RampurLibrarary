@@ -150,7 +150,7 @@ class _OverduePanel extends ConsumerWidget {
             : Column(children: [
                 for (final l in loans)
                   ListTile(
-                    leading: Thumb(l.bookCover),
+                    leading: CoverThumb(l.bookCover),
                     title: Text(l.bookTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
                     subtitle: Text('${l.userName} · ${l.membershipId} · due ${formatDate(l.dueAt)}'),
                     trailing: Pill('${DateTime.now().difference(l.dueAt).inDays}d late', color: dangerColor),
@@ -178,7 +178,7 @@ class _ReservationsPanel extends ConsumerWidget {
             : Column(children: [
                 for (final r in items)
                   ListTile(
-                    leading: Thumb(r.bookCover),
+                    leading: CoverThumb(r.bookCover),
                     title: Text(r.bookTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
                     subtitle: Text('${r.userName} · ${timeAgo(r.createdAt)}'),
                     trailing: Pill(r.queuePosition == null ? 'pending' : '#${r.queuePosition}', color: warnColor),

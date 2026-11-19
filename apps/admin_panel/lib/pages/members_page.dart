@@ -358,7 +358,7 @@ class MemberDetailPage extends ConsumerWidget {
                           : Column(children: [
                               for (final l in loans.take(30))
                                 ListTile(
-                                  leading: Thumb(l.bookCover),
+                                  leading: CoverThumb(l.bookCover),
                                   title: Text(l.bookTitle),
                                   subtitle: Text('Issued ${formatDate(l.issuedAt)} · due ${formatDate(l.dueAt)}'
                                       '${l.returnedAt != null ? ' · returned ${formatDate(l.returnedAt)}' : ''}'),

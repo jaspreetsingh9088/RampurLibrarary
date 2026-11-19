@@ -193,7 +193,7 @@ class _IssueTabState extends ConsumerState<_IssueTab> {
                   selected: _book?.id == b.id,
                   onTap: () => setState(() => _book = b),
                   leading: Icon(_book?.id == b.id ? Icons.radio_button_checked : Icons.radio_button_unchecked),
-                  trailing: Thumb(b.coverUrl),
+                  trailing: CoverThumb(b.coverUrl),
                   title: Text(b.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                   subtitle: Text('${b.authorLine} · ${b.availableCopies}/${b.totalCopies} available'),
                 ),
@@ -363,7 +363,7 @@ class _LoansTabState extends ConsumerState<_LoansTab> {
                       for (final l in loans)
                         DataRow(cells: [
                           DataCell(Row(children: [
-                            Thumb(l.bookCover, width: 32, height: 46),
+                            CoverThumb(l.bookCover, width: 32, height: 46),
                             const SizedBox(width: 10),
                             ConstrainedBox(constraints: const BoxConstraints(maxWidth: 260), child: Text(l.bookTitle, overflow: TextOverflow.ellipsis)),
                           ])),

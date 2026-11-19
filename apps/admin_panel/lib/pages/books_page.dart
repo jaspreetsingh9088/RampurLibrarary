@@ -179,7 +179,7 @@ class _BooksPageState extends ConsumerState<BooksPage> {
           DataRow(cells: [
             DataCell(
               Row(children: [
-                Thumb(b.coverUrl),
+                CoverThumb(b.coverUrl),
                 const SizedBox(width: 12),
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 320),

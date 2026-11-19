@@ -238,8 +238,8 @@ class EmptyHint extends StatelessWidget {
       );
 }
 
-class Thumb extends StatelessWidget {
-  const Thumb(this.url, {super.key, this.width = 40, this.height = 56});
+class CoverThumb extends StatelessWidget {
+  const CoverThumb(this.url, {super.key, this.width = 40, this.height = 56});
   final String url;
   final double width;
   final double height;
