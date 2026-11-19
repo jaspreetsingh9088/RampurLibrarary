@@ -39,7 +39,9 @@ void main() {
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Full name *'), 'Jaspreet Singh');
     await tester.scrollUntilVisible(find.text('Continue'), 300, scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('Continue'));
+    await tester.ensureVisible(find.text('Continue'));
+    await tester.pump();
+    await tester.tap(find.text('Continue'), warnIfMissed: true);
     await settle(tester, 3);
     debugPrint('SCREEN TEXTS: ${tester.widgetList<Text>(find.byType(Text)).map((t) => t.data ?? t.textSpan?.toPlainText()).take(40).join(' | ')}');
     expect(find.text('Jaspreet'), findsOneWidget); // greeting on home
