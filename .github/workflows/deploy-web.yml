@@ -1,0 +1,97 @@
+name: Deploy web (Vercel)
+
+# Admin panel (Flutter web) and the public SEO website (Next.js) are deployed to two
+# Vercel projects. The projects are created automatically on first run.
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/admin_panel/**
+      - packages/library_core/**
+      - site/**
+      - .github/workflows/deploy-web.yml
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+env:
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+  VERCEL_SCOPE: ${{ secrets.VERCEL_SCOPE }}
+  ADMIN_PROJECT: ${{ vars.VERCEL_ADMIN_PROJECT || 'rampur-library-admin' }}
+  SITE_PROJECT: ${{ vars.VERCEL_SITE_PROJECT || 'rampur-library-site' }}
+  FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+  FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+  FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+  FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
+  FIREBASE_AUTH_DOMAIN: ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+  FIREBASE_MEASUREMENT_ID: ${{ secrets.FIREBASE_MEASUREMENT_ID }}
+  FIREBASE_WEB_APP_ID: ${{ secrets.FIREBASE_WEB_APP_ID }}
+  SITE_URL: ${{ vars.SITE_URL }}
+
+jobs:
+  admin:
+    name: Admin panel → Vercel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Build Flutter web
+        working-directory: apps/admin_panel
+        run: |
+          python3 ../../scripts/write_dart_defines.py dart_defines.json
+          flutter pub get
+          flutter build web --release --dart-define-from-file=dart_defines.json --base-href / --no-web-resources-cdn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: admin-web
+          path: apps/admin_panel/build/web
+      - name: Deploy to Vercel
+        if: env.VERCEL_TOKEN != ''
+        working-directory: apps/admin_panel/build/web
+        run: |
+          SCOPE=${VERCEL_SCOPE:+--scope $VERCEL_SCOPE}
+          npx --yes vercel@latest link --yes --project "$ADMIN_PROJECT" --token "$VERCEL_TOKEN" $SCOPE
+          URL=$(npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN" $SCOPE)
+          echo "### Admin panel deployed: $URL" >> "$GITHUB_STEP_SUMMARY"
+      - name: Vercel token missing
+        if: env.VERCEL_TOKEN == ''
+        run: echo "::warning::VERCEL_TOKEN secret is not set — built the admin panel but skipped deployment. See docs/SETUP.md."
+
+  site:
+    name: SEO website → Vercel
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+      NEXT_PUBLIC_SITE_URL: ${{ vars.SITE_URL }}
+      NEXT_TELEMETRY_DISABLED: 1
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - name: Build & deploy to Vercel
+        if: env.VERCEL_TOKEN != ''
+        run: |
+          SCOPE=${VERCEL_SCOPE:+--scope $VERCEL_SCOPE}
+          npx --yes vercel@latest link --yes --project "$SITE_PROJECT" --token "$VERCEL_TOKEN" $SCOPE
+          npx --yes vercel@latest pull --yes --environment=production --token "$VERCEL_TOKEN" $SCOPE
+          npx --yes vercel@latest build --prod --token "$VERCEL_TOKEN" $SCOPE
+          URL=$(npx --yes vercel@latest deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN" $SCOPE)
+          echo "### Website deployed: $URL" >> "$GITHUB_STEP_SUMMARY"
+      - name: Build only (no Vercel token)
+        if: env.VERCEL_TOKEN == ''
+        run: |
+          npm run build
+          echo "::warning::VERCEL_TOKEN secret is not set — built the website but skipped deployment. See docs/SETUP.md."

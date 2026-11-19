@@ -1,0 +1,17 @@
+import type { MetadataRoute } from 'next';
+
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    name: 'Rampur Library',
+    short_name: 'Library',
+    description: 'Search the catalogue, reserve and renew books.',
+    start_url: '/',
+    display: 'standalone',
+    background_color: '#f8fafc',
+    theme_color: '#1e4d6b',
+    icons: [
+      { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+  };
+}

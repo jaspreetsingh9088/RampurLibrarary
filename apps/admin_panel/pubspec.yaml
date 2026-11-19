@@ -1,0 +1,36 @@
+name: rampur_admin
+description: Rampur Library — admin panel (Flutter web, deployed on Vercel).
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
+  library_core:
+    path: ../../packages/library_core
+  firebase_core: ^5.2.0
+  firebase_auth: ^7.1.0
+  cloud_firestore: ^7.2.0
+  flutter_riverpod: ^3.0.0
+  go_router: ^18.0.0
+  intl: ^0.20.2
+  image_picker: ^1.2.0
+  fl_chart: ^1.0.0
+  http: ^1.5.0
+  web: ^1.1.0
+  url_launcher: ^6.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/

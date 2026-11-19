@@ -1,0 +1,134 @@
+rules_version = '2';
+
+// Rampur Library — Firestore security rules
+// Roles: admins carry the custom claim `admin == true` (set with tools/set-admin.mjs
+// or the `setAdminRole` callable). Librarians carry `librarian == true` and can run
+// circulation but cannot manage staff or settings.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAdmin() { return signedIn() && request.auth.token.admin == true; }
+    function isStaff() { return isAdmin() || (signedIn() && request.auth.token.librarian == true); }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+    // ---------- Public catalogue ----------
+    match /books/{bookId} {
+      allow read: if true;
+      allow write: if isStaff();
+
+      match /reviews/{uid} {
+        allow read: if true;
+        allow create, update: if isSelf(uid)
+          && request.resource.data.rating is int
+          && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
+          && request.resource.data.comment is string
+          && request.resource.data.comment.size() <= 1000;
+        allow delete: if isSelf(uid) || isStaff();
+      }
+    }
+
+    match /categories/{id} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /events/{id} {
+      allow read: if resource.data.published == true || isStaff();
+      allow write: if isStaff();
+    }
+
+    match /settings/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /broadcasts/{id} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    // ---------- Members ----------
+    match /users/{uid} {
+      allow read: if isSelf(uid) || isStaff();
+      // Members create their own profile on first login, but cannot grant themselves
+      // privileges, fines or a membership number (those are set by functions/staff).
+      allow create: if isSelf(uid)
+        && !request.resource.data.keys().hasAny(['status', 'membershipId', 'outstandingFines', 'maxLoans', 'membershipType']);
+      allow update: if isStaff()
+        || (isSelf(uid) && !changed().hasAny(['status', 'membershipId', 'outstandingFines', 'maxLoans', 'membershipType', 'phone']));
+      allow delete: if isAdmin();
+
+      match /notifications/{id} {
+        allow read: if isSelf(uid) || isStaff();
+        allow update: if isSelf(uid) && changed().hasOnly(['read']);
+        allow delete: if isSelf(uid);
+        allow create: if isStaff();
+      }
+
+      match /wishlist/{bookId} {
+        allow read, write: if isSelf(uid);
+      }
+
+      match /readingHistory/{id} {
+        allow read: if isSelf(uid) || isStaff();
+        allow write: if isStaff();
+      }
+    }
+
+    // ---------- Circulation ----------
+    match /loans/{id} {
+      allow read: if isStaff() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow write: if isStaff();
+    }
+
+    match /reservations/{id} {
+      allow read: if isStaff() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending';
+      // Members may only cancel their own reservation.
+      allow update: if isStaff()
+        || (signedIn() && resource.data.userId == request.auth.uid
+            && changed().hasOnly(['status', 'updatedAt'])
+            && request.resource.data.status == 'cancelled');
+      allow delete: if isStaff();
+    }
+
+    match /fines/{id} {
+      allow read: if isStaff() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow write: if isStaff();
+    }
+
+    match /bookRequests/{id} {
+      allow read: if isStaff() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update, delete: if isStaff();
+    }
+
+    match /feedback/{id} {
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, update, delete: if isStaff();
+    }
+
+    // ---------- Internal ----------
+    match /staff/{uid} {
+      allow read: if isAdmin() || isSelf(uid);
+      allow write: if false; // managed by the setStaffRole function
+    }
+
+    match /counters/{id} {
+      allow read: if isStaff();
+      allow write: if false; // functions only
+    }
+
+    match /auditLogs/{id} {
+      allow read: if isAdmin();
+      allow create: if isStaff();
+      allow update, delete: if false;
+    }
+  }
+}

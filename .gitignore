@@ -1,0 +1,36 @@
+# General
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+*.local
+.idea/
+.vscode/
+service-account*.json
+
+# Flutter / Dart
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/build/
+**/pubspec.lock
+**/.packages
+**/*.iml
+apps/*/android/
+apps/*/ios/*
+!apps/*/ios/Podfile
+apps/*/linux/
+apps/*/macos/
+apps/*/windows/
+apps/mobile_app/web/
+**/dart_defines.json
+**/google-services.json
+**/GoogleService-Info.plist
+
+# Node
+node_modules/
+functions/lib/
+site/.next/
+site/out/
+.vercel/
