@@ -38,6 +38,7 @@ void main() {
     expect(find.text('Complete your profile'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Full name *'), 'Jaspreet Singh');
+    await tester.scrollUntilVisible(find.text('Continue'), 300, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Continue'));
     await settle(tester, 3);
     expect(find.text('Jaspreet'), findsOneWidget); // greeting on home
