@@ -149,7 +149,7 @@ class _LoanStrip extends StatelessWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       SectionHeader('Currently reading', onSeeAll: () => context.go('/my-books')),
       SizedBox(
-        height: 96,
+        height: 118,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -167,7 +167,7 @@ class _LoanStrip extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.all(10),
                     child: Row(children: [
-                      BookCover(url: l.bookCover, title: l.bookTitle, width: 50, height: 74),
+                      BookCover(url: l.bookCover, title: l.bookTitle, width: 56, height: 82),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -233,7 +233,7 @@ class _Carousel extends ConsumerWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       SectionHeader(title, onSeeAll: onSeeAll),
       SizedBox(
-        height: 250,
+        height: 266,
         child: value.isLoading && books.isEmpty
             ? const Center(child: CircularProgressIndicator())
             : books.isEmpty

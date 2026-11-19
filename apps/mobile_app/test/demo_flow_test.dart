@@ -42,11 +42,8 @@ void main() {
     expect(find.text('Jaspreet Singh'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
     await settle(tester, 3);
-    final c = ProviderScope.containerOf(tester.element(find.byType(Scaffold).first));
-    debugPrint('MEMBER: name="${c.read(memberProvider).value?.name}" loading=${c.read(memberProvider).isLoading} '
-        'loc=${c.read(routerProvider).routerDelegate.currentConfiguration.uri}');
-    debugPrint('SCREEN TEXTS: ${tester.widgetList<Text>(find.byType(Text)).map((t) => t.data ?? t.textSpan?.toPlainText()).take(40).join(' | ')}');
-    expect(find.text('Jaspreet'), findsOneWidget); // greeting on home
+    expect(find.text('Jaspreet'), findsOneWidget);
+    expect(tester.takeException(), isNull); // greeting on home
     expect(find.text('Currently reading'), findsOneWidget);
   });
 }
