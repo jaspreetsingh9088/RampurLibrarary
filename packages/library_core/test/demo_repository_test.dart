@@ -37,4 +37,31 @@ void main() {
     // Search by ISBN
     expect((await repo.findByIsbn('978-81-7371-146-6'))!.title, 'Wings of Fire');
   });
+
+  test('admin demo: issue, return with fine, dashboard', () async {
+    final repo = DemoLibraryRepository(withCommunity: true);
+    final stats = await repo.dashboardStats();
+    expect(stats.totalMembers, 8);
+    expect(stats.activeLoans, greaterThan(0));
+    expect(stats.overdueLoans, greaterThan(0));
+
+    final member = (await repo.findMember('RPL-000003'))!;
+    final book = (await repo.findByIsbn('9780553380163'))!; // A Brief History of Time
+    final loanId = await repo.issueBook(bookId: book.id, memberId: member.id, staffUid: 'demo-admin');
+    expect((await repo.getBook(book.id))!.availableCopies, book.availableCopies - 1);
+
+    final loan = (await repo.watchMemberLoans(member.id, activeOnly: true).first).firstWhere((l) => l.id == loanId);
+    final fine = await repo.returnBook(loan: loan, staffUid: 'demo-admin');
+    expect(fine, 0);
+    expect((await repo.getBook(book.id))!.availableCopies, book.availableCopies);
+
+    // Overdue return creates a fine
+    final overdue = (await repo.watchLoans(status: LoanStatus.overdue).first).first;
+    expect(await repo.returnBook(loan: overdue, staffUid: 'demo-admin'), greaterThan(0));
+
+    // Suspended member cannot borrow
+    expect(() => repo.issueBook(bookId: book.id, memberId: 'member-8', staffUid: 'x'), throwsA(isA<LibraryException>()));
+
+    expect((await repo.issuesPerDay()).length, 14);
+  });
 }

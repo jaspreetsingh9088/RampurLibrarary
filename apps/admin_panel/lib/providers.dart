@@ -1,23 +1,26 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:library_core/library_core.dart';
 
-final repoProvider = Provider<LibraryRepository>((ref) => LibraryRepository());
+import 'staff_auth.dart';
 
-final authStateProvider = StreamProvider<User?>((ref) => FirebaseAuth.instance.idTokenChanges());
+export 'staff_auth.dart';
 
-enum StaffRole { admin, librarian, none }
+/// True when the build has no Firebase config: the panel runs on offline sample data.
+final isDemoProvider = Provider<bool>((ref) => false);
 
-/// Staff role from the Firebase ID-token custom claims.
-final staffRoleProvider = FutureProvider<StaffRole>((ref) async {
-  final user = ref.watch(authStateProvider).value;
-  if (user == null) return StaffRole.none;
-  final token = await user.getIdTokenResult();
-  final claims = token.claims ?? const {};
-  if (claims['admin'] == true) return StaffRole.admin;
-  if (claims['librarian'] == true) return StaffRole.librarian;
-  return StaffRole.none;
-});
+final repoProvider = Provider<LibraryRepository>(
+  (ref) => ref.watch(isDemoProvider) ? DemoLibraryRepository(withCommunity: true) : LibraryRepository(),
+);
+
+final staffAuthProvider = Provider<StaffAuth>((ref) => ref.watch(isDemoProvider) ? DemoStaffAuth() : FirebaseStaffAuth());
+
+/// Signed-in staff account (null when signed out).
+final authStateProvider = StreamProvider<StaffSession?>((ref) => ref.watch(staffAuthProvider).sessions());
+
+/// Staff role from the session (Firebase custom claims in production).
+final staffRoleProvider = Provider<AsyncValue<StaffRole>>(
+  (ref) => ref.watch(authStateProvider).whenData((s) => s?.role ?? StaffRole.none),
+);
 
 final staffUidProvider = Provider<String>((ref) => ref.watch(authStateProvider).value?.uid ?? '');
 

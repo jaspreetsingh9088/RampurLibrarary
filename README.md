@@ -62,6 +62,8 @@ A complete library management system:
 | `firebase.yml` | push to `main` (backend changes) | deploys rules, indexes and Cloud Functions |
 | `mobile.yml` | push to `main`, tags `v*` | builds **APK**, split APKs, **AAB** and **IPA**; tags publish a GitHub Release |
 
+In **demo mode** (no Firebase keys) the app uses OTP `123456` and the admin panel `admin@demo.com` / `demo1234`, both on sample data.
+
 Download the latest app builds from **Actions → Mobile builds → Artifacts**, or from **Releases** for tagged versions.
 
 ## Local development

@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -117,6 +116,9 @@ class AdminApp extends ConsumerWidget {
       theme: theme(Brightness.light),
       darkTheme: theme(Brightness.dark),
       routerConfig: ref.watch(routerProvider),
+      builder: (context, child) => ref.watch(isDemoProvider)
+          ? Banner(message: 'DEMO', location: BannerLocation.topEnd, color: brandAccent, child: child ?? const SizedBox())
+          : child ?? const SizedBox(),
     );
   }
 }
@@ -166,17 +168,17 @@ class AdminLayout extends ConsumerWidget {
         PopupMenuButton<String>(
           tooltip: 'Account',
           onSelected: (v) async {
-            if (v == 'logout') await FirebaseAuth.instance.signOut();
+            if (v == 'logout') await ref.read(staffAuthProvider).signOut();
           },
           itemBuilder: (_) => [
-            PopupMenuItem(enabled: false, child: Text('${user?.email ?? user?.phoneNumber ?? ''}\n${role.name}')),
+            PopupMenuItem(enabled: false, child: Text('${user?.email ?? ''}\n${role.name}${ref.watch(isDemoProvider) ? ' · demo' : ''}')),
             const PopupMenuItem(value: 'logout', child: ListTile(leading: Icon(Icons.logout), title: Text('Sign out'))),
           ],
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: CircleAvatar(
               backgroundColor: scheme.primaryContainer,
-              child: Text((user?.email ?? 'A').substring(0, 1).toUpperCase(), style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800)),
+              child: Text((user?.email.isNotEmpty == true ? user!.email : 'A').substring(0, 1).toUpperCase(), style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800)),
             ),
           ),
         ),

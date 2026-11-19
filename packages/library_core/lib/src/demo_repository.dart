@@ -11,8 +11,11 @@ import 'utils.dart';
 /// browsing, reservations, renewals, wishlist, reviews, profile…) without any
 /// backend. Data lives in memory and resets when the app restarts.
 class DemoLibraryRepository extends LibraryRepository {
-  DemoLibraryRepository() {
+  /// [withCommunity] adds a set of members with loans, reservations and fines so the
+  /// admin panel has something to manage.
+  DemoLibraryRepository({bool withCommunity = false}) {
     _seed();
+    if (withCommunity) _seedCommunity();
   }
 
   static const demoUid = 'demo-member';
@@ -43,7 +46,9 @@ class DemoLibraryRepository extends LibraryRepository {
   final List<Loan> _history = [];
   final List<Reservation> _reservations = [];
   final List<Fine> _fines = [];
-  final List<AppNotification> _notifications = [];
+  final Map<String, List<AppNotification>> _inbox = {};
+  final List<StaffMember> _staff = [];
+  final List<Map<String, dynamic>> _audit = [];
   final List<AppNotification> _broadcasts = [];
   final List<LibraryEvent> _events = [];
   final List<BookRequest> _requests = [];
@@ -200,9 +205,12 @@ class DemoLibraryRepository extends LibraryRepository {
         at: now.subtract(const Duration(minutes: 20)), data: {'loanId': _loans[0].id});
   }
 
+  List<AppNotification> _box(String uid) => _inbox.putIfAbsent(uid, () => []);
+
   void _notify(String uid, String title, String body, String type, {DateTime? at, Map<String, String> data = const {}}) {
-    _notifications.insert(0, AppNotification(id: _id('n'), title: title, body: body, type: type, data: data, createdAt: at ?? DateTime.now()));
-    _notifications.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+    final box = _box(uid);
+    box.insert(0, AppNotification(id: _id('n'), title: title, body: body, type: type, data: data, createdAt: at ?? DateTime.now()));
+    box.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
   }
 
   void _recomputeRating(String bookId) {
@@ -457,32 +465,34 @@ class DemoLibraryRepository extends LibraryRepository {
   Stream<List<Fine>> watchMemberFines(String uid) => _watch(() => _fines.where((f) => f.userId == uid).toList());
 
   @override
-  Stream<List<AppNotification>> watchNotifications(String uid) => _watch(() => List.of(_notifications));
+  Stream<List<AppNotification>> watchNotifications(String uid) => _watch(() => List.of(_box(uid)));
 
   @override
-  Stream<int> watchUnreadCount(String uid) => _watch(() => _notifications.where((n) => !n.read).length);
+  Stream<int> watchUnreadCount(String uid) => _watch(() => _box(uid).where((n) => !n.read).length);
 
   AppNotification _asRead(AppNotification n) =>
       AppNotification(id: n.id, title: n.title, body: n.body, type: n.type, data: n.data, createdAt: n.createdAt, read: true);
 
   @override
   Future<void> markNotificationRead(String uid, String id) async {
-    final i = _notifications.indexWhere((n) => n.id == id);
-    if (i >= 0) _notifications[i] = _asRead(_notifications[i]);
+    final box = _box(uid);
+    final i = box.indexWhere((n) => n.id == id);
+    if (i >= 0) box[i] = _asRead(box[i]);
     _changed();
   }
 
   @override
   Future<void> markAllNotificationsRead(String uid) async {
-    for (var i = 0; i < _notifications.length; i++) {
-      _notifications[i] = _asRead(_notifications[i]);
+    final box = _box(uid);
+    for (var i = 0; i < box.length; i++) {
+      box[i] = _asRead(box[i]);
     }
     _changed();
   }
 
   @override
   Future<void> deleteNotification(String uid, String id) async {
-    _notifications.removeWhere((n) => n.id == id);
+    _box(uid).removeWhere((n) => n.id == id);
     _changed();
   }
 
@@ -506,4 +516,483 @@ class DemoLibraryRepository extends LibraryRepository {
 
   @override
   Future<void> submitFeedback({required String uid, required String message, int rating = 0}) => _lag();
+
+  // ===========================================================================
+  // Staff side (admin panel)
+  // ===========================================================================
+
+  void _seedCommunity() {
+    final now = DateTime.now();
+    const people = [
+      ('Ayesha Khan', '+919811000001', 'standard'),
+      ('Rohit Sharma', '+919811000002', 'student'),
+      ('Imran Ali', '+919811000003', 'standard'),
+      ('Neha Verma', '+919811000004', 'premium'),
+      ('Gurpreet Kaur', '+919811000005', 'standard'),
+      ('Mohd. Sameer', '+919811000006', 'student'),
+      ('Pooja Saxena', '+919811000007', 'senior'),
+      ('Arjun Mehta', '+919811000008', 'standard'),
+    ];
+    for (var i = 0; i < people.length; i++) {
+      final p = people[i];
+      final id = 'member-${i + 1}';
+      _members[id] = Member(
+        id: id,
+        name: p.$1,
+        phone: p.$2,
+        membershipType: p.$3,
+        membershipId: 'RPL-${(i + 1).toString().padLeft(6, '0')}',
+        status: i == 7 ? MemberStatus.suspended : MemberStatus.active,
+        createdAt: now.subtract(Duration(days: 200 - i * 20)),
+      );
+    }
+    // (member, book, issued days ago, loan days)
+    const loans = [
+      (1, 'book-1', 5, 14), (1, 'book-9', 20, 14), (2, 'book-5', 16, 14), (3, 'book-2', 3, 14),
+      (4, 'book-6', 18, 14), (5, 'book-12', 1, 14), (6, 'book-8', 12, 14), (7, 'book-11', 25, 14),
+      (2, 'book-4', 9, 14), (6, 'book-10', 7, 14),
+    ];
+    for (final l in loans) {
+      final b = _books[l.$2]!;
+      final m = _members['member-${l.$1}']!;
+      if (b.availableCopies <= 0 && l.$2 != 'book-4' && l.$2 != 'book-10') continue;
+      final issued = now.subtract(Duration(days: l.$3, hours: 3));
+      final due = issued.add(Duration(days: l.$4));
+      _loans.add(Loan(
+        id: _id('loan'), bookId: b.id, bookTitle: b.title, bookCover: b.coverUrl, userId: m.id, userName: m.name,
+        membershipId: m.membershipId, issuedAt: issued, dueAt: due, status: due.isBefore(now) ? LoanStatus.overdue : LoanStatus.issued,
+      ));
+      if (l.$2 != 'book-4' && l.$2 != 'book-10') _books[b.id] = b.copyWith(availableCopies: b.availableCopies - 1);
+    }
+    // Returned loans spread over the last two weeks (for the dashboard chart)
+    for (var d = 1; d <= 13; d++) {
+      final b = _books['book-${(d % 12) + 1}']!;
+      final m = _members['member-${(d % 7) + 1}']!;
+      final issued = now.subtract(Duration(days: d, hours: 2));
+      _history.add(Loan(
+        id: _id('loan'), bookId: b.id, bookTitle: b.title, bookCover: b.coverUrl, userId: m.id, userName: m.name,
+        membershipId: m.membershipId, issuedAt: issued, dueAt: issued.add(const Duration(days: 14)),
+        returnedAt: issued.add(const Duration(days: 1)), status: LoanStatus.returned,
+      ));
+    }
+    _reservations.addAll([
+      Reservation(id: _id('res'), bookId: 'book-4', bookTitle: 'Gitanjali', bookCover: _books['book-4']!.coverUrl, userId: 'member-1',
+          userName: 'Ayesha Khan', membershipId: 'RPL-000001', status: ReservationStatus.pending, queuePosition: 1, createdAt: now.subtract(const Duration(days: 2))),
+      Reservation(id: _id('res'), bookId: 'book-3', bookTitle: 'The Discovery of India', bookCover: _books['book-3']!.coverUrl, userId: 'member-4',
+          userName: 'Neha Verma', membershipId: 'RPL-000004', status: ReservationStatus.ready, createdAt: now.subtract(const Duration(days: 1)),
+          readyAt: now, expiresAt: now.add(const Duration(days: 3))),
+    ]);
+    _books['book-3'] = _books['book-3']!.copyWith(availableCopies: _books['book-3']!.availableCopies - 1);
+    _fines.addAll([
+      Fine(id: _id('fine'), userId: 'member-7', userName: 'Pooja Saxena', bookTitle: 'Bhagavad Gita As It Is', amount: 55, createdAt: now.subtract(const Duration(days: 2))),
+      Fine(id: _id('fine'), userId: 'member-2', userName: 'Rohit Sharma', bookTitle: 'Indian Polity', amount: 30, createdAt: now.subtract(const Duration(days: 6))),
+      Fine(id: _id('fine'), userId: 'member-3', userName: 'Imran Ali', bookTitle: 'The Guide', amount: 20, status: FineStatus.paid, paymentMode: 'cash',
+          createdAt: now.subtract(const Duration(days: 9)), paidAt: now.subtract(const Duration(days: 8))),
+      Fine(id: _id('fine'), userId: 'member-5', userName: 'Gurpreet Kaur', bookTitle: 'Malgudi Days', amount: 350, reason: 'Lost book',
+          createdAt: now.subtract(const Duration(days: 4))),
+    ]);
+    _refreshOutstanding();
+    _requests.addAll([
+      BookRequest(id: _id('req'), userId: 'member-2', userName: 'Rohit Sharma', title: 'Lucent\'s General Knowledge', author: 'Lucent', note: 'Very useful for SSC.',
+          createdAt: now.subtract(const Duration(days: 1))),
+      BookRequest(id: _id('req'), userId: 'member-4', userName: 'Neha Verma', title: 'Ikigai', author: 'Héctor García', status: 'approved',
+          createdAt: now.subtract(const Duration(days: 8))),
+    ]);
+    _staff.addAll([
+      StaffMember(uid: 'demo-admin', email: 'admin@demo.com', role: 'admin'),
+      StaffMember(uid: 'demo-librarian', email: 'librarian@demo.com', role: 'librarian'),
+    ]);
+  }
+
+  void _refreshOutstanding() {
+    for (final id in _members.keys.toList()) {
+      final total = _fines.where((f) => f.userId == id && f.status == FineStatus.unpaid).fold<double>(0, (a, f) => a + f.amount);
+      final m = _members[id]!;
+      _members[id] = Member(
+        id: m.id, name: m.name, phone: m.phone, email: m.email, photoUrl: m.photoUrl, address: m.address, dateOfBirth: m.dateOfBirth,
+        gender: m.gender, membershipId: m.membershipId, membershipType: m.membershipType, status: m.status, maxLoans: m.maxLoans,
+        outstandingFines: total, favouriteCategories: m.favouriteCategories, pushEnabled: m.pushEnabled,
+        membershipExpiresAt: m.membershipExpiresAt, createdAt: m.createdAt,
+      );
+    }
+  }
+
+  List<Loan> get _allLoans => [..._loans, ..._history];
+
+  @override
+  Future<void> log(String action, Json details, String staffUid) async {
+    _audit.insert(0, {'id': _id('log'), 'action': action, ...details, 'by': staffUid, 'at': DateTime.now()});
+  }
+
+  @override
+  Stream<List<Json>> watchAuditLog({int limit = 100}) => _watch(() => _audit.take(limit).toList());
+
+  @override
+  Future<String> uploadImage(String path, Uint8List bytes, {String contentType = 'image/jpeg'}) async {
+    throw LibraryException('Image upload needs Firebase. In demo mode paste an image URL instead.');
+  }
+
+  // ----- Catalogue management -----
+
+  @override
+  Future<String> saveBook(Book book, {Uint8List? coverBytes, String coverContentType = 'image/jpeg'}) async {
+    await _lag();
+    if (coverBytes != null) throw LibraryException('Cover upload needs Firebase. In demo mode paste a cover image URL.');
+    final id = book.id.isEmpty ? _id('book') : book.id;
+    final old = _books[id];
+    final available = old == null ? book.totalCopies : old.availableCopies + (book.totalCopies - old.totalCopies);
+    if (available < 0) throw LibraryException('Cannot reduce copies below the number currently issued or on hold.');
+    _books[id] = Book.fromJson(id, {
+      ...book.toJson(),
+      'isbn': book.isbn.replaceAll(RegExp(r'[^0-9Xx]'), ''),
+      'availableCopies': available,
+      'slug': slugify(book.title),
+      'ratingAvg': old?.ratingAvg ?? 0,
+      'ratingCount': old?.ratingCount ?? 0,
+      'createdAt': old?.createdAt ?? DateTime.now(),
+      'updatedAt': DateTime.now(),
+    });
+    _changed();
+    return id;
+  }
+
+  @override
+  Future<void> deleteBook(String id) async {
+    if (_loans.any((l) => l.bookId == id)) throw LibraryException('This book has copies out on loan. Return them first.');
+    _books.remove(id);
+    _changed();
+  }
+
+  @override
+  Future<void> saveCategory({String? id, required String name, String icon = '', int order = 0}) async {
+    final key = id == null || id.isEmpty ? slugify(name) : id;
+    _categories.removeWhere((c) => c.id == key);
+    _categories.add(BookCategory(id: key, slug: key, name: name, icon: icon, order: order));
+    _categories.sort((a, b) => a.order.compareTo(b.order));
+    _changed();
+  }
+
+  @override
+  Future<void> deleteCategory(String id) async {
+    _categories.removeWhere((c) => c.id == id);
+    _changed();
+  }
+
+  // ----- Members -----
+
+  @override
+  Stream<List<Member>> watchMembers({String search = '', MemberStatus? status, int limit = 100}) => _watch(() {
+        final q = search.trim().toLowerCase();
+        final digits = search.replaceAll(RegExp(r'[^0-9]'), '');
+        var list = _members.values.where((m) {
+          if (q.isEmpty) return status == null || m.status == status;
+          if (q.startsWith('rpl')) return m.membershipId.toLowerCase() == q;
+          if (digits.length >= 6) return m.phone.endsWith(digits.length > 10 ? digits.substring(digits.length - 10) : digits);
+          return m.name.toLowerCase().startsWith(q) || m.name.toLowerCase().contains(' $q');
+        }).toList();
+        list.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+        return list.take(limit).toList();
+      });
+
+  @override
+  Future<Member?> findMember(String query) async => (await watchMembers(search: query, limit: 1).first).firstOrNull;
+
+  Member _withFields(Member m, Json f) => Member(
+        id: m.id,
+        name: (f['name'] as String?) ?? m.name,
+        phone: m.phone,
+        email: (f['email'] as String?) ?? m.email,
+        photoUrl: m.photoUrl,
+        address: m.address,
+        dateOfBirth: m.dateOfBirth,
+        gender: m.gender,
+        membershipId: m.membershipId,
+        membershipType: (f['membershipType'] as String?) ?? m.membershipType,
+        status: f.containsKey('status') ? MemberStatus.values.byName(f['status'] as String) : m.status,
+        maxLoans: (f['maxLoans'] as int?) ?? m.maxLoans,
+        outstandingFines: m.outstandingFines,
+        favouriteCategories: m.favouriteCategories,
+        pushEnabled: m.pushEnabled,
+        membershipExpiresAt: f.containsKey('membershipExpiresAt') ? tsToDate(f['membershipExpiresAt']) : m.membershipExpiresAt,
+        createdAt: m.createdAt,
+      );
+
+  @override
+  Future<void> setMemberStatus(String uid, MemberStatus status) async {
+    _members[uid] = _withFields(_members[uid]!, {'status': status.name});
+    _changed();
+  }
+
+  @override
+  Future<void> updateMemberAsStaff(String uid, Json fields) async {
+    await _lag();
+    _members[uid] = _withFields(_members[uid]!, fields);
+    _changed();
+  }
+
+  @override
+  Future<String> createWalkInMember({required String name, required String phone, String email = '', String address = ''}) async {
+    await _lag();
+    final normalized = normalizePhone(phone);
+    if (_members.values.any((m) => m.phone == normalized)) throw LibraryException('A member with this phone number already exists.');
+    final id = _id('member');
+    _members[id] = Member(
+      id: id, name: name.trim(), phone: normalized, email: email.trim(), address: address.trim(),
+      membershipId: 'RPL-${(_members.length + 1).toString().padLeft(6, '0')}', createdAt: DateTime.now(),
+    );
+    _changed();
+    return id;
+  }
+
+  // ----- Circulation -----
+
+  @override
+  Stream<List<Loan>> watchLoans({LoanStatus? status, int limit = 200}) => _watch(() {
+        final now = DateTime.now();
+        final list = status == null
+            ? (_allLoans..sort((a, b) => b.issuedAt.compareTo(a.issuedAt)))
+            : (_allLoans.where((l) => l.status == status || (status == LoanStatus.overdue && l.status == LoanStatus.issued && l.dueAt.isBefore(now))).toList()
+              ..sort((a, b) => a.dueAt.compareTo(b.dueAt)));
+        return list.take(limit).toList();
+      });
+
+  @override
+  Stream<List<Loan>> watchBookLoans(String bookId) => _watch(() => _loans.where((l) => l.bookId == bookId).toList());
+
+  @override
+  Future<String> issueBook({required String bookId, required String memberId, required String staffUid, int? loanDaysOverride}) async {
+    await _lag();
+    final book = _books[bookId];
+    final member = _members[memberId];
+    if (book == null) throw LibraryException('Book not found.');
+    if (member == null) throw LibraryException('Member not found.');
+    if (member.status != MemberStatus.active) throw LibraryException('Membership is ${member.status.name}.');
+    final active = _loans.where((l) => l.userId == memberId).toList();
+    if (active.length >= member.maxLoans) throw LibraryException('${member.name} already has ${active.length} books (limit ${member.maxLoans}).');
+    if (active.any((l) => l.bookId == bookId)) throw LibraryException('This member already has this book.');
+    if (active.any((l) => l.isOverdue)) throw LibraryException('Member has an overdue book. Collect it before issuing another.');
+    final hold = _reservations.indexWhere((r) => r.userId == memberId && r.bookId == bookId && r.status == ReservationStatus.ready);
+    if (hold < 0 && book.availableCopies <= 0) throw LibraryException('No copies available. Place a reservation instead.');
+
+    final now = DateTime.now();
+    final loan = Loan(
+      id: _id('loan'), bookId: book.id, bookTitle: book.title, bookCover: book.coverUrl, userId: member.id, userName: member.name,
+      membershipId: member.membershipId, issuedAt: now, dueAt: now.add(Duration(days: loanDaysOverride ?? _settings.loanDays)), issuedBy: staffUid,
+    );
+    _loans.add(loan);
+    if (hold >= 0) {
+      final r = _reservations[hold];
+      _reservations[hold] = Reservation(id: r.id, bookId: r.bookId, bookTitle: r.bookTitle, bookCover: r.bookCover, userId: r.userId,
+          userName: r.userName, membershipId: r.membershipId, status: ReservationStatus.fulfilled, createdAt: r.createdAt);
+    } else {
+      _books[book.id] = book.copyWith(availableCopies: book.availableCopies - 1);
+    }
+    _notify(member.id, 'Book issued', '"${book.title}" is due back on ${formatDate(loan.dueAt)}.', 'issued', data: {'loanId': loan.id});
+    await log('issue', {'loanId': loan.id, 'bookId': bookId, 'memberId': memberId}, staffUid);
+    _changed();
+    return loan.id;
+  }
+
+  @override
+  Future<double> returnBook({required Loan loan, required String staffUid, bool waiveFine = false, bool lost = false, double? lostCharge}) async {
+    await _lag();
+    final i = _loans.indexWhere((l) => l.id == loan.id);
+    if (i < 0) throw LibraryException('This loan is already closed.');
+    final now = DateTime.now();
+    var fine = waiveFine
+        ? 0.0
+        : computeFine(dueAt: loan.dueAt, at: now, finePerDay: _settings.finePerDay, graceDays: _settings.graceDays, maxFine: _settings.maxFinePerLoan);
+    final l = _loans.removeAt(i);
+    _history.add(Loan(
+      id: l.id, bookId: l.bookId, bookTitle: l.bookTitle, bookCover: l.bookCover, userId: l.userId, userName: l.userName,
+      membershipId: l.membershipId, issuedAt: l.issuedAt, dueAt: l.dueAt, returnedAt: now, status: lost ? LoanStatus.lost : LoanStatus.returned,
+      renewCount: l.renewCount, fineAmount: fine,
+    ));
+    final b = _books[l.bookId];
+    if (b != null) {
+      _books[l.bookId] = lost ? b.copyWith(totalCopies: b.totalCopies - 1) : b.copyWith(availableCopies: b.availableCopies + 1);
+    }
+    if (fine > 0) {
+      _fines.insert(0, Fine(id: _id('fine'), userId: l.userId, userName: l.userName, loanId: l.id, bookTitle: l.bookTitle, amount: fine, createdAt: now));
+    }
+    if (lost && (lostCharge ?? 0) > 0) {
+      _fines.insert(0, Fine(id: _id('fine'), userId: l.userId, userName: l.userName, loanId: l.id, bookTitle: l.bookTitle, amount: lostCharge!,
+          reason: 'Lost book', createdAt: now));
+      fine += lostCharge;
+    }
+    _refreshOutstanding();
+    // Serve the waiting list
+    final next = _reservations.indexWhere((r) => r.bookId == l.bookId && r.status == ReservationStatus.pending);
+    final nb = _books[l.bookId];
+    if (!lost && next >= 0 && nb != null && nb.availableCopies > 0) {
+      final r = _reservations[next];
+      _books[l.bookId] = nb.copyWith(availableCopies: nb.availableCopies - 1);
+      _reservations[next] = Reservation(id: r.id, bookId: r.bookId, bookTitle: r.bookTitle, bookCover: r.bookCover, userId: r.userId,
+          userName: r.userName, membershipId: r.membershipId, status: ReservationStatus.ready, createdAt: r.createdAt, readyAt: now,
+          expiresAt: now.add(Duration(days: _settings.reservationHoldDays)));
+    }
+    await log(lost ? 'mark_lost' : 'return', {'loanId': l.id, 'fine': fine}, staffUid);
+    _changed();
+    return fine;
+  }
+
+  @override
+  Future<void> extendLoan(String loanId, int days) async {
+    final i = _loans.indexWhere((l) => l.id == loanId);
+    if (i < 0) return;
+    final l = _loans[i];
+    _loans[i] = Loan(
+      id: l.id, bookId: l.bookId, bookTitle: l.bookTitle, bookCover: l.bookCover, userId: l.userId, userName: l.userName,
+      membershipId: l.membershipId, issuedAt: l.issuedAt, dueAt: l.dueAt.add(Duration(days: days)), renewCount: l.renewCount + 1,
+    );
+    _changed();
+  }
+
+  // ----- Reservations & fines -----
+
+  @override
+  Stream<List<Reservation>> watchReservations({ReservationStatus? status, int limit = 200}) =>
+      _watch(() => _reservations.where((r) => status == null || r.status == status).take(limit).toList());
+
+  @override
+  Future<void> setReservationStatus(String id, ReservationStatus status) async {
+    if (status == ReservationStatus.cancelled) return cancelReservation(id);
+    final i = _reservations.indexWhere((r) => r.id == id);
+    if (i < 0) return;
+    final r = _reservations[i];
+    _reservations[i] = Reservation(id: r.id, bookId: r.bookId, bookTitle: r.bookTitle, bookCover: r.bookCover, userId: r.userId,
+        userName: r.userName, membershipId: r.membershipId, status: status, createdAt: r.createdAt);
+    _changed();
+  }
+
+  @override
+  Stream<List<Fine>> watchFines({FineStatus? status, int limit = 200}) =>
+      _watch(() => _fines.where((f) => status == null || f.status == status).take(limit).toList());
+
+  @override
+  Future<void> settleFine(String id, {required bool waive, String paymentMode = 'cash', required String staffUid}) async {
+    final i = _fines.indexWhere((f) => f.id == id);
+    if (i < 0) return;
+    final f = _fines[i];
+    _fines[i] = Fine(id: f.id, userId: f.userId, userName: f.userName, loanId: f.loanId, bookTitle: f.bookTitle, amount: f.amount, reason: f.reason,
+        status: waive ? FineStatus.waived : FineStatus.paid, paymentMode: waive ? '' : paymentMode, createdAt: f.createdAt, paidAt: DateTime.now());
+    _refreshOutstanding();
+    await log(waive ? 'waive_fine' : 'collect_fine', {'fineId': id}, staffUid);
+    _changed();
+  }
+
+  @override
+  Future<void> addManualFine({required Member member, required double amount, required String reason}) async {
+    _fines.insert(0, Fine(id: _id('fine'), userId: member.id, userName: member.name, amount: amount, reason: reason, createdAt: DateTime.now()));
+    _refreshOutstanding();
+    _changed();
+  }
+
+  // ----- Messaging, events, requests -----
+
+  @override
+  Stream<List<Broadcast>> watchBroadcasts({int limit = 50}) => _watch(() => _broadcasts
+      .map((b) => Broadcast(id: b.id, title: b.title, body: b.body, status: 'sent (demo)', createdAt: b.createdAt))
+      .take(limit)
+      .toList());
+
+  @override
+  Future<void> sendBroadcast({required String title, required String body, String topic = 'all', String link = '', required String staffUid}) async {
+    await _lag();
+    _broadcasts.insert(0, AppNotification(id: _id('bc'), title: title, body: body, type: 'broadcast', read: true, isBroadcast: true, createdAt: DateTime.now()));
+    _changed();
+  }
+
+  @override
+  Future<void> sendToMember({required String uid, required String title, required String body}) async {
+    _notify(uid, title, body, 'general');
+    _changed();
+  }
+
+  @override
+  Future<void> saveEvent(LibraryEvent e, {Uint8List? imageBytes}) async {
+    await _lag();
+    if (imageBytes != null) throw LibraryException('Image upload needs Firebase.');
+    final id = e.id.isEmpty ? _id('ev') : e.id;
+    _events.removeWhere((x) => x.id == id);
+    _events.add(LibraryEvent(id: id, title: e.title, description: e.description, imageUrl: e.imageUrl, startAt: e.startAt, endAt: e.endAt,
+        location: e.location, published: e.published, notify: e.notify));
+    _changed();
+  }
+
+  @override
+  Future<void> deleteEvent(String id) async {
+    _events.removeWhere((e) => e.id == id);
+    _changed();
+  }
+
+  @override
+  Stream<List<BookRequest>> watchBookRequests({int limit = 200}) => _watch(() => _requests.take(limit).toList());
+
+  @override
+  Future<void> updateBookRequest(String id, String status, {String adminNote = ''}) async {
+    final i = _requests.indexWhere((r) => r.id == id);
+    if (i < 0) return;
+    final r = _requests[i];
+    _requests[i] = BookRequest(id: r.id, userId: r.userId, userName: r.userName, title: r.title, author: r.author, note: r.note,
+        status: status, adminNote: adminNote, createdAt: r.createdAt);
+    _changed();
+  }
+
+  // ----- Dashboard & reports -----
+
+  @override
+  Future<DashboardStats> dashboardStats() async => DashboardStats(
+        totalBooks: _books.length,
+        totalMembers: _members.length,
+        activeLoans: _loans.length,
+        overdueLoans: _loans.where((l) => l.isOverdue).length,
+        pendingReservations: _reservations.where((r) => r.isOpen).length,
+        unpaidFines: _fines.where((f) => f.status == FineStatus.unpaid).length,
+        pendingRequests: _requests.where((r) => r.status == 'pending').length,
+      );
+
+  @override
+  Future<List<MapEntry<DateTime, int>>> issuesPerDay({int days = 14}) async {
+    final start = DateTime.now().subtract(Duration(days: days - 1));
+    final from = DateTime(start.year, start.month, start.day);
+    final buckets = <DateTime, int>{for (var i = 0; i < days; i++) from.add(Duration(days: i)): 0};
+    for (final l in _allLoans) {
+      final k = DateTime(l.issuedAt.year, l.issuedAt.month, l.issuedAt.day);
+      if (buckets.containsKey(k)) buckets[k] = buckets[k]! + 1;
+    }
+    return buckets.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+  }
+
+  @override
+  Future<double> finesCollected({int days = 30}) async {
+    final from = DateTime.now().subtract(Duration(days: days));
+    return _fines.where((f) => f.status == FineStatus.paid && (f.paidAt ?? DateTime(0)).isAfter(from)).fold<double>(0, (a, f) => a + f.amount);
+  }
+
+  @override
+  Future<List<Book>> allBooks() async => _books.values.toList()..sort((a, b) => a.title.compareTo(b.title));
+
+  @override
+  Future<List<Member>> allMembers() async => _members.values.toList();
+
+  @override
+  Future<List<Loan>> allLoans({int days = 365}) async => _allLoans..sort((a, b) => b.issuedAt.compareTo(a.issuedAt));
+
+  @override
+  Future<List<Fine>> allFines() async => List.of(_fines);
+
+  // ----- Staff -----
+
+  @override
+  Stream<List<StaffMember>> watchStaff() => _watch(() => _staff.where((s) => s.role != 'none').toList());
+
+  @override
+  Future<void> setStaffRole({String? email, String? phone, String? uid, required String role}) async {
+    await _lag();
+    final key = uid ?? email ?? phone ?? '';
+    _staff.removeWhere((s) => s.uid == key || (email != null && s.email == email));
+    if (role != 'none') _staff.add(StaffMember(uid: uid ?? 'demo-${_seq++}', email: email ?? '', phone: phone ?? '', role: role));
+    _changed();
+  }
 }

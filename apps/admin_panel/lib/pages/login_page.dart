@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -23,14 +22,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     if (!_form.currentState!.validate()) return;
     setState(() => _busy = true);
     try {
-      final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(email: _email.text.trim(), password: _password.text);
-      await cred.user?.getIdTokenResult(true); // pick up freshly granted staff claims
-    } on FirebaseAuthException catch (e) {
-      toast(switch (e.code) {
-        'invalid-credential' || 'wrong-password' || 'user-not-found' => 'Incorrect email or password.',
-        'too-many-requests' => 'Too many attempts. Try again later.',
-        _ => e.message ?? e.code,
-      }, error: true);
+      await ref.read(staffAuthProvider).signIn(_email.text.trim(), _password.text);
+    } catch (e) {
+      toast(errText(e), error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -41,7 +35,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       toast('Enter your email first.', error: true);
       return;
     }
-    await guard(() => FirebaseAuth.instance.sendPasswordResetEmail(email: _email.text.trim()), success: 'Password reset email sent.');
+    await guard(() => ref.read(staffAuthProvider).resetPassword(_email.text.trim()), success: 'Password reset email sent.');
   }
 
   @override
@@ -49,7 +43,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final user = ref.watch(authStateProvider).value;
     final role = ref.watch(staffRoleProvider).value;
     final notStaff = user != null && role == StaffRole.none;
-    final who = user == null ? '' : (user.email ?? user.phoneNumber ?? '');
+    final who = user?.email ?? '';
     final t = Theme.of(context);
 
     return Scaffold(
@@ -83,6 +77,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       const SizedBox(height: 8),
                       Text('Use the account your administrator created for you.', style: t.textTheme.bodyMedium),
                       const SizedBox(height: 28),
+                      if (ref.watch(isDemoProvider)) ...[
+                        Card(
+                          color: brandAccent.withValues(alpha: 0.15),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              const Text('Demo mode — sample data, nothing is saved', style: TextStyle(fontWeight: FontWeight.w700)),
+                              const SizedBox(height: 6),
+                              const SelectableText('Admin: admin@demo.com\nLibrarian: librarian@demo.com\nPassword: demo1234'),
+                              TextButton(
+                                onPressed: () {
+                                  _email.text = 'admin@demo.com';
+                                  _password.text = 'demo1234';
+                                  _signIn();
+                                },
+                                child: const Text('Sign in as demo admin'),
+                              ),
+                            ]),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       if (notStaff) ...[
                         Card(
                           color: dangerColor.withValues(alpha: 0.08),
@@ -92,7 +108,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               Text('$who is not a staff account.', style: const TextStyle(fontWeight: FontWeight.w700)),
                               const SizedBox(height: 6),
                               const Text('Ask an admin to grant you access on the Staff page, then sign in again.'),
-                              TextButton(onPressed: () => FirebaseAuth.instance.signOut(), child: const Text('Use another account')),
+                              TextButton(onPressed: () => ref.read(staffAuthProvider).signOut(), child: const Text('Use another account')),
                             ]),
                           ),
                         ),
