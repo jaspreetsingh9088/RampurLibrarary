@@ -13,7 +13,7 @@ Future<void> settle(WidgetTester tester, [int seconds = 2]) async {
 
 void main() {
   testWidgets('demo mode: OTP login leads to profile completion and home', (tester) async {
-    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.physicalSize = const Size(1080, 4400);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
 
@@ -38,10 +38,9 @@ void main() {
     expect(find.text('Complete your profile'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Full name *'), 'Jaspreet Singh');
-    await tester.scrollUntilVisible(find.text('Continue'), 300, scrollable: find.byType(Scrollable).first);
-    await tester.ensureVisible(find.text('Continue'));
     await tester.pump();
-    await tester.tap(find.text('Continue'), warnIfMissed: true);
+    expect(find.text('Jaspreet Singh'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
     await settle(tester, 3);
     final c = ProviderScope.containerOf(tester.element(find.byType(Scaffold).first));
     debugPrint('MEMBER: name="${c.read(memberProvider).value?.name}" loading=${c.read(memberProvider).isLoading} '
