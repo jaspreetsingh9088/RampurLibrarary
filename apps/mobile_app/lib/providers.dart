@@ -1,12 +1,19 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:library_core/library_core.dart';
 
-final repoProvider = Provider<LibraryRepository>((ref) => LibraryRepository());
+import 'services/auth_service.dart';
 
-final authStateProvider = StreamProvider<User?>((ref) => FirebaseAuth.instance.authStateChanges());
+/// True when the build has no Firebase config: the app runs on offline sample data.
+final isDemoProvider = Provider<bool>((ref) => false);
 
-final uidProvider = Provider<String?>((ref) => ref.watch(authStateProvider).value?.uid);
+final repoProvider = Provider<LibraryRepository>((ref) => ref.watch(isDemoProvider) ? DemoLibraryRepository() : LibraryRepository());
+
+final authGatewayProvider = Provider<AuthGateway>((ref) => ref.watch(isDemoProvider) ? DemoAuthGateway() : FirebaseAuthGateway());
+
+/// Signed-in user id (null when signed out).
+final authStateProvider = StreamProvider<String?>((ref) => ref.watch(authGatewayProvider).uidChanges());
+
+final uidProvider = Provider<String?>((ref) => ref.watch(authStateProvider).value);
 
 final memberProvider = StreamProvider<Member?>((ref) {
   final uid = ref.watch(uidProvider);

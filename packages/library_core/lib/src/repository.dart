@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 import 'config.dart';
@@ -20,13 +19,18 @@ class LibraryException implements Exception {
 /// Single data-access layer used by both apps. Every Firestore path lives here.
 class LibraryRepository {
   LibraryRepository({FirebaseFirestore? firestore, FirebaseStorage? storage, FirebaseFunctions? functions})
-      : _db = firestore ?? FirebaseFirestore.instance,
-        _storage = storage ?? FirebaseStorage.instance,
-        _functions = functions ?? FirebaseFunctions.instanceFor(region: AppConfig.functionsRegion);
+      : _firestoreOverride = firestore,
+        _storageOverride = storage,
+        _functionsOverride = functions;
 
-  final FirebaseFirestore _db;
-  final FirebaseStorage _storage;
-  final FirebaseFunctions _functions;
+  final FirebaseFirestore? _firestoreOverride;
+  final FirebaseStorage? _storageOverride;
+  final FirebaseFunctions? _functionsOverride;
+
+  // Resolved lazily so a subclass (e.g. the offline demo) never touches Firebase.
+  late final FirebaseFirestore _db = _firestoreOverride ?? FirebaseFirestore.instance;
+  late final FirebaseStorage _storage = _storageOverride ?? FirebaseStorage.instance;
+  late final FirebaseFunctions _functions = _functionsOverride ?? FirebaseFunctions.instanceFor(region: AppConfig.functionsRegion);
 
   CollectionReference<Json> get _books => _db.collection('books');
   CollectionReference<Json> get _users => _db.collection('users');
@@ -182,16 +186,16 @@ class LibraryRepository {
   }
 
   /// Called after OTP sign-in. The membership number is assigned by a Cloud Function.
-  Future<void> ensureMemberProfile(User user) async {
-    final ref = _users.doc(user.uid);
+  Future<void> ensureMemberProfile({required String uid, String phone = '', String name = '', String email = '', String photoUrl = ''}) async {
+    final ref = _users.doc(uid);
     final snap = await ref.get();
     if (snap.exists) return;
     await ref.set({
-      'name': user.displayName ?? '',
-      'nameLower': (user.displayName ?? '').toLowerCase(),
-      'phone': user.phoneNumber ?? '',
-      'email': user.email ?? '',
-      'photoUrl': user.photoURL ?? '',
+      'name': name,
+      'nameLower': name.toLowerCase(),
+      'phone': phone,
+      'email': email,
+      'photoUrl': photoUrl,
       'preferences': {'push': true},
       'fcmTokens': <String>[],
       'createdAt': FieldValue.serverTimestamp(),

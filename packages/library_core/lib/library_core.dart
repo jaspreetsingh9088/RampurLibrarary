@@ -5,3 +5,4 @@ export 'src/config.dart';
 export 'src/models.dart';
 export 'src/utils.dart';
 export 'src/repository.dart';
+export 'src/demo_repository.dart';

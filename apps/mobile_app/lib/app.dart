@@ -1,5 +1,4 @@
 import 'package:firebase_analytics/firebase_analytics.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -52,19 +51,20 @@ final pushServiceProvider = Provider<PushService>((ref) => PushService(ref.watch
 
 /// Side effects tied to the signed-in user: create the profile doc, start/stop push.
 final sessionEffectsProvider = Provider<void>((ref) {
-  ref.listen<AsyncValue<User?>>(authStateProvider, (prev, next) async {
-    final user = next.value;
-    final push = ref.read(pushServiceProvider);
-    if (user != null) {
+  final demo = ref.read(isDemoProvider);
+  ref.listen<AsyncValue<String?>>(authStateProvider, (prev, next) async {
+    final uid = next.value;
+    if (uid != null) {
       try {
-        await ref.read(repoProvider).ensureMemberProfile(user);
+        await ref.read(repoProvider).ensureMemberProfile(uid: uid, phone: ref.read(authGatewayProvider).phoneNumber ?? '');
       } catch (e) {
         debugPrint('Profile setup failed: $e');
       }
-      await push.start(user.uid);
-      FirebaseAnalytics.instance.setUserId(id: user.uid);
-    } else if (prev?.value != null) {
-      await push.stop();
+      if (demo) return; // no push / analytics without Firebase
+      await ref.read(pushServiceProvider).start(uid);
+      FirebaseAnalytics.instance.setUserId(id: uid);
+    } else if (prev?.value != null && !demo) {
+      await ref.read(pushServiceProvider).stop();
     }
   }, fireImmediately: true);
 });
@@ -85,7 +85,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
     initialLocation: '/home',
     refreshListenable: refresh,
-    observers: [FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance)],
+    observers: [if (!ref.read(isDemoProvider)) FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance)],
     redirect: (context, state) {
       final loc = state.matchedLocation;
       final auth = ref.read(authStateProvider);
@@ -156,6 +156,9 @@ class RampurLibraryApp extends ConsumerWidget {
       darkTheme: buildTheme(Brightness.dark),
       themeMode: mode,
       routerConfig: router,
+      builder: (context, child) => ref.watch(isDemoProvider)
+          ? Banner(message: 'DEMO', location: BannerLocation.topEnd, color: AppColors.accent, child: child ?? const SizedBox())
+          : child ?? const SizedBox(),
     );
   }
 }

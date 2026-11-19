@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,8 +26,8 @@ class ProfileScreen extends ConsumerWidget {
       ),
     );
     if (ok != true) return;
-    await ref.read(pushServiceProvider).stop();
-    await FirebaseAuth.instance.signOut();
+    if (!ref.read(isDemoProvider)) await ref.read(pushServiceProvider).stop();
+    await ref.read(authGatewayProvider).signOut();
   }
 
   @override

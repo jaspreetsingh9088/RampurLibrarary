@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -354,9 +353,9 @@ class AppSettingsScreen extends ConsumerWidget {
     );
     if (ok != true) return;
     try {
-      await ref.read(pushServiceProvider).stop();
+      if (!ref.read(isDemoProvider)) await ref.read(pushServiceProvider).stop();
       await ref.read(repoProvider).deleteMyAccount();
-      await FirebaseAuth.instance.signOut();
+      await ref.read(authGatewayProvider).signOut();
       showSnack('Your account has been deleted.');
     } catch (e) {
       showSnack(errorText(e), error: true);

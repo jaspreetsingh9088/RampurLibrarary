@@ -7,10 +7,9 @@ import 'package:go_router/go_router.dart';
 import 'package:library_core/library_core.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../providers.dart';
 import '../services/auth_service.dart';
 import '../widgets/common.dart';
-
-final phoneAuthProvider = Provider<PhoneAuthService>((ref) => PhoneAuthService());
 
 class PhoneLoginScreen extends ConsumerStatefulWidget {
   const PhoneLoginScreen({super.key});
@@ -33,7 +32,7 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
     }
     setState(() => _loading = true);
     try {
-      final sent = await ref.read(phoneAuthProvider).sendCode(normalizePhone(_phone.text));
+      final sent = await ref.read(authGatewayProvider).sendCode(normalizePhone(_phone.text));
       if (sent && mounted) context.push('/otp');
     } catch (e) {
       showSnack(errorText(e), error: true);
@@ -58,6 +57,13 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
             Text('Sign in with your mobile number. We\'ll send you a 6-digit code.',
                 style: t.textTheme.bodyLarge?.copyWith(color: t.colorScheme.onSurfaceVariant)),
             const SizedBox(height: 32),
+            if (ref.watch(isDemoProvider))
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: t.colorScheme.tertiaryContainer, borderRadius: BorderRadius.circular(12)),
+                child: const Text('Demo mode — no SMS is sent. Enter any mobile number, then use OTP 123456.'),
+              ),
             TextFormField(
               controller: _phone,
               keyboardType: TextInputType.phone,
@@ -140,7 +146,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     if (_code.text.length != 6) return;
     setState(() => _loading = true);
     try {
-      await ref.read(phoneAuthProvider).verifyCode(_code.text);
+      await ref.read(authGatewayProvider).verifyCode(_code.text);
       // The router redirects once the auth state changes.
     } catch (e) {
       showSnack(errorText(e), error: true);
@@ -149,7 +155,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   }
 
   Future<void> _resend() async {
-    final auth = ref.read(phoneAuthProvider);
+    final auth = ref.read(authGatewayProvider);
     try {
       await auth.sendCode(auth.phoneNumber!);
       showSnack('A new code is on its way.');
@@ -162,13 +168,18 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final phone = ref.read(phoneAuthProvider).phoneNumber ?? '';
+    final phone = ref.read(authGatewayProvider).phoneNumber ?? '';
     return Scaffold(
       appBar: AppBar(),
       body: ListView(padding: const EdgeInsets.all(24), children: [
         Text('Enter the code', style: t.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         Text('We sent a 6-digit code to $phone', style: t.textTheme.bodyLarge?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+        if (ref.watch(isDemoProvider))
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text('Demo code: ${DemoAuthGateway.demoCode}', style: TextStyle(color: t.colorScheme.tertiary, fontWeight: FontWeight.w700)),
+          ),
         const SizedBox(height: 32),
         TextField(
           controller: _code,

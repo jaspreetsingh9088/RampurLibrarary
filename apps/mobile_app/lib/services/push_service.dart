@@ -22,7 +22,7 @@ class PushService {
   PushService(this._repo);
 
   final LibraryRepository _repo;
-  final _messaging = FirebaseMessaging.instance;
+  FirebaseMessaging get _messaging => FirebaseMessaging.instance;
   StreamSubscription<String>? _tokenSub;
   StreamSubscription<RemoteMessage>? _fgSub;
   StreamSubscription<RemoteMessage>? _openSub;

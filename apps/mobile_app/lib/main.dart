@@ -7,25 +7,26 @@ import 'package:library_core/library_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
-import 'screens/not_configured_screen.dart';
+import 'providers.dart';
 import 'services/push_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
+  // Without Firebase keys the app runs in offline demo mode on sample data.
   final configured = await AppConfig.initFirebase();
-  if (!configured) {
-    runApp(const NotConfiguredApp());
-    return;
+  if (configured) {
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(true);
   }
-
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(true);
 
   final prefs = await SharedPreferences.getInstance();
   runApp(ProviderScope(
-    overrides: [prefsProvider.overrideWithValue(prefs)],
+    overrides: [
+      prefsProvider.overrideWithValue(prefs),
+      isDemoProvider.overrideWithValue(!configured),
+    ],
     child: const RampurLibraryApp(),
   ));
 }
